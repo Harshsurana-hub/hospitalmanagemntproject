@@ -25,3 +25,7 @@ Reviewed the second MERN study guide and documented applicable middleware/model/
 Before publication, npm test passed all three foundation tests and npm run build passed. The configured Atlas connection was verified locally by GET http://127.0.0.1:5001/api/health returning 200 with status ok and the expected frontend CORS origin. This verifies connectivity only, not CRUD, auth or borrowing functionality. Local environment credentials are excluded from Git.
 
 An empty main baseline was created solely to enable PR review in the initially empty remote repository. Implementation is on feature/project-foundation. All sixteen planned issues are published; only the four lead-owned issues can currently be assigned. No feature issues are completed, no PR is merged, and no production deployment is claimed.
+
+## API integration readiness
+
+`docs/INTEGRATION-TEST-PLAN.md` maps issue #14 acceptance cases to dependencies and actual coverage. Auth, Book/search, and borrowing integration suites are pending their feature APIs; no tests are claimed for unimplemented routes. Existing foundation integration checks remain in `backend/test/foundation.test.js`.
