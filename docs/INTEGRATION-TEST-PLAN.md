@@ -2,7 +2,7 @@
 
 Issue #14 covers integration checks for authentication, roles, Books/search, and borrowing/inventory consistency. This plan maps the agreed API contract to executable tests and records the feature dependencies. Do not mark an unimplemented endpoint as passing. Test MongoDB transactions on Atlas or a replica set.
 
-Run the current baseline from the repository root:
+Run the current baseline from the repository root. The Atlas health integration check runs when `backend/.env` contains a real test or Atlas `MONGO_URI`; it is reported as skipped when no usable URI is configured:
 
 ```sh
 npm ci
@@ -18,6 +18,7 @@ For authenticated API tests, provision an isolated test database and Admin throu
 | --- | --- | --- | --- |
 | Configuration | Missing/invalid required environment values | Startup rejected with safe message | Foundation test |
 | API foundation | Health with disconnected database | 503 safe JSON; expected CORS origin | Foundation integration test |
+| MongoDB integration | Real Mongoose connection and healthy API response | 200 safe JSON; expected CORS origin; no database writes | `backend/test/mongo.integration.test.js` (passes with configured URI) |
 | API foundation | Unknown route and malformed JSON | 404 and 400 safe JSON | Foundation integration test |
 | API foundation | Async handler rejects | Central handler sends safe 500 without internals | Foundation integration test |
 | Token parser | Valid/expired/malformed/exp-less token and malformed stored session | Invalid sessions rejected | Frontend unit tests |
