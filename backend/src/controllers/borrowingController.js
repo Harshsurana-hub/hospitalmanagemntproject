@@ -6,6 +6,8 @@ const User = require("../models/userModel");
 const borrowingController = {
     issueBook: async (req, res, next) => {
         let session = null;
+        let decremented = false;
+
         try {
             const { userId, bookId, dueDate } = req.body;
 
@@ -56,57 +58,55 @@ const borrowingController = {
                 });
             }
 
-            // Check duplicate active loan
-            const activeLoan = await Borrowing.findOne({
-                userId,
-                bookId,
-                status: "issued"
-            });
-            if (activeLoan) {
-                return res.status(409).json({
-                    error: { message: "User already has an active loan for this book" }
-                });
-            }
-
-            // Check available copies
             if (book.availableCopies <= 0) {
                 return res.status(409).json({
                     error: { message: "No available copies for this book" }
                 });
             }
 
-            // Use transaction when supported by MongoDB session and connection is active
-            let useTransaction = false;
-            try {
-                if (mongoose.connection.readyState === 1 && typeof mongoose.startSession === "function") {
-                    session = await mongoose.startSession();
-                    if (session && typeof session.startTransaction === "function") {
-                        session.startTransaction();
-                        useTransaction = true;
-                    }
-                }
-            } catch {
-                session = null;
-                useTransaction = false;
+            // Use replica-set/Atlas transaction when supported
+            const topology = mongoose.connection?.client?.topology?.description;
+            const supportsTransactions = Boolean(
+                topology && topology.type !== "Single" && topology.setName
+            );
+
+            if (supportsTransactions) {
+                session = await mongoose.startSession();
+                session.startTransaction();
             }
 
-            const sessionOpt = useTransaction && session ? { session } : {};
+            const sessionOpt = session ? { session } : {};
+
+            // Check duplicate active loan
+            const activeLoan = await (session
+                ? Borrowing.findOne({ userId, bookId, status: "issued" }).session(session)
+                : Borrowing.findOne({ userId, bookId, status: "issued" }));
+
+            if (activeLoan) {
+                if (session) {
+                    await session.abortTransaction();
+                }
+                return res.status(409).json({
+                    error: { message: "User already has an active loan for this book" }
+                });
+            }
 
             // Atomically decrement stock
             const updatedBook = await Book.findOneAndUpdate(
                 { _id: bookId, availableCopies: { $gt: 0 } },
                 { $inc: { availableCopies: -1 } },
-                { new: true, ...sessionOpt }
+                { returnDocument: "after", ...sessionOpt }
             );
 
             if (!updatedBook) {
-                if (useTransaction && session) {
+                if (session) {
                     await session.abortTransaction();
                 }
                 return res.status(409).json({
                     error: { message: "No available copies for this book" }
                 });
             }
+            decremented = true;
 
             // Create borrowing record
             const [borrowing] = await Borrowing.create(
@@ -122,7 +122,7 @@ const borrowingController = {
                 sessionOpt
             );
 
-            if (useTransaction && session) {
+            if (session) {
                 await session.commitTransaction();
             }
 
@@ -137,6 +137,17 @@ const borrowingController = {
                 try {
                     await session.abortTransaction();
                 } catch {}
+            } else if (decremented) {
+                // Guaranteed atomic rollback: restore stock if loan creation failed
+                try {
+                    await Book.findByIdAndUpdate(req.body.bookId, { $inc: { availableCopies: 1 } });
+                } catch {}
+            }
+
+            if (err.code === 11000) {
+                return res.status(409).json({
+                    error: { message: "User already has an active loan for this book" }
+                });
             }
             return next(err);
         } finally {

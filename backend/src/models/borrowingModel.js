@@ -36,6 +36,11 @@ const borrowingSchema = new mongoose.Schema(
     }
 );
 
+borrowingSchema.index(
+    { userId: 1, bookId: 1 },
+    { unique: true, partialFilterExpression: { status: "issued" } }
+);
+
 borrowingSchema.methods.toSafeObject = function () {
     return {
         id: this._id.toString(),

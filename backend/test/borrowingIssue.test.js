@@ -171,7 +171,18 @@ test("POST /api/borrowings handles missing records, unavailable stock, and dupli
 
     // 3. Duplicate active loan -> 409 Conflict
     Book.findById = async () => ({ _id: validBookId, availableCopies: 3 });
-    Borrowing.findOne = async () => ({ _id: "loan_1", status: "issued" });
+    Borrowing.findOne = () => ({
+        session: async () => ({ _id: "loan_1", status: "issued" })
+    });
+    const origStartSession1 = mongoose.startSession;
+    mongoose.startSession = async () => ({
+        startTransaction: () => {},
+        abortTransaction: async () => {},
+        endSession: async () => {}
+    });
+    t.after(() => {
+        mongoose.startSession = origStartSession1;
+    });
     const resDuplicateLoan = await fetch(url, {
         method: "POST",
         headers: {
@@ -186,7 +197,7 @@ test("POST /api/borrowings handles missing records, unavailable stock, and dupli
     });
 
     // 4. No stock available -> 409 Conflict
-    Borrowing.findOne = async () => null;
+    Borrowing.findOne = () => Object.assign(Promise.resolve(null), { session: async () => null });
     Book.findById = async () => ({ _id: validBookId, availableCopies: 0 });
     const resNoStock = await fetch(url, {
         method: "POST",
@@ -208,6 +219,7 @@ test("POST /api/borrowings successfully issues book, decrements availableCopies,
     const origFindBorrowing = Borrowing.findOne;
     const origFindAndUpdate = Book.findOneAndUpdate;
     const origCreateBorrowing = Borrowing.create;
+    const origStartSession = mongoose.startSession;
 
     t.after(() => {
         User.findById = origFindUser;
@@ -215,6 +227,14 @@ test("POST /api/borrowings successfully issues book, decrements availableCopies,
         Borrowing.findOne = origFindBorrowing;
         Book.findOneAndUpdate = origFindAndUpdate;
         Borrowing.create = origCreateBorrowing;
+        mongoose.startSession = origStartSession;
+    });
+
+    mongoose.startSession = async () => ({
+        startTransaction: () => {},
+        commitTransaction: async () => {},
+        abortTransaction: async () => {},
+        endSession: async () => {}
     });
 
     const validUserId = "60d5ecb8b5c9c61234567802";
@@ -239,7 +259,7 @@ test("POST /api/borrowings successfully issues book, decrements availableCopies,
         availableCopies: 2
     });
 
-    Borrowing.findOne = async () => null; // No existing loan
+    Borrowing.findOne = () => Object.assign(Promise.resolve(null), { session: async () => null });
 
     let decremented = false;
     Book.findOneAndUpdate = async () => {
