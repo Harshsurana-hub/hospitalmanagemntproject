@@ -136,6 +136,8 @@ const borrowingController = {
                         typeof updatedBook.toSafeObject === "function"
                             ? updatedBook.toSafeObject()
                             : updatedBook
+                    borrowing: borrowing.toSafeObject(),
+                    book: updatedBook.toSafeObject()
                 }
             });
         } catch (err) {
