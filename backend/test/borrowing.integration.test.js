@@ -424,5 +424,3 @@ test("MongoDB Transactional Borrowing Integration Suite", async (t) => {
         assert.ok(bodySpoof.data.every((b) => b.userId === userA._id.toString()));
     });
 });
-
-});
